@@ -1,2 +1,5 @@
 *.pdf
 data/
+local_autograder/
+handin.tar
+.idea/

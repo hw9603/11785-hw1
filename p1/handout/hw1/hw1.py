@@ -79,16 +79,13 @@ class Sigmoid(Activation):
         super(Sigmoid, self).__init__()
 
     def forward(self, x):
-
         # Might we need to store something before returning?
-
-        raise NotImplemented
+        self.state = 1 / (1 + np.exp(-x))
+        return self.state
 
     def derivative(self):
-
         # Maybe something we need later in here...
-
-        raise NotImplemented
+        return self.state * (1 - self.state)
 
 
 class Tanh(Activation):
@@ -103,10 +100,11 @@ class Tanh(Activation):
         super(Tanh, self).__init__()
 
     def forward(self, x):
-        raise NotImplemented
+        self.state = np.tanh(x)
+        return self.state
 
     def derivative(self):
-        raise NotImplemented
+        return 1 - np.power(self.state, 2)
 
 
 class ReLU(Activation):
@@ -119,10 +117,11 @@ class ReLU(Activation):
         super(ReLU, self).__init__()
 
     def forward(self, x):
-        raise NotImplemented
+        self.state = np.maximum(x, 0)
+        return self.state
 
     def derivative(self):
-        raise NotImplemented
+        return np.where(self.state != 0, 1.0, 0.0)
 
 # Ok now things get decidedly more interesting. The following Criterion class
 # will be used again as the basis for a number of loss functions (which are in the
