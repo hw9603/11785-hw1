@@ -286,7 +286,7 @@ class MLP(object):
                     self.W.append(weight_init_fn(hiddens[-1], output_size))
                     self.b.append(bias_init_fn(output_size))
                 else:
-                    self.W.append(weight_init_fn(hiddens[i], hiddens[i + 1]))
+                    self.W.append(weight_init_fn(hiddens[i - 1], hiddens[i]))
                     self.b.append(bias_init_fn(hiddens[i]))
 
         # HINT: self.foo = [ bar(???) for ?? in ? ]
