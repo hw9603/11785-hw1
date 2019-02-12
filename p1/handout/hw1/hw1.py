@@ -167,16 +167,20 @@ class SoftmaxCrossEntropy(Criterion):
 
         self.logits = x
         self.labels = y
+        # Solution 1 (optimal): Using LogSumExp trick
+        M = np.tile(np.max(x, axis=1).reshape(-1, 1), 10)
+        logsumexp = M + np.log(np.sum(np.exp(x - M), axis=1)).reshape(-1, 1)
+        self.sm = x - logsumexp  # log of softmax
+        self.loss = -np.sum(np.multiply(y, self.sm), axis=1)
 
-        # ...
-
-        raise NotImplemented
+        # Solution 2 (DANGER!): Not using LogSumExp trick
+        # self.sm = np.exp(x) / np.sum(np.exp(x), axis=1).reshape(-1, 1)
+        # self.loss = -np.sum(np.multiply(y, np.log(self.sm)), axis=1)
+        return self.loss
 
     def derivative(self):
 
-        # self.sm might be useful here...
-
-        raise NotImplemented
+        return np.exp(self.sm) - self.labels
 
 
 class BatchNorm(object):
@@ -235,11 +239,11 @@ class BatchNorm(object):
 
 # These are both easy one-liners, don't over-think them
 def random_normal_weight_init(d0, d1):
-    raise NotImplemented
+    return np.random.normal(0, 1, (d0, d1))
 
 
 def zeros_bias_init(d):
-    raise NotImplemented
+    return np.zeros(d)
 
 
 class MLP(object):
@@ -266,9 +270,11 @@ class MLP(object):
         # Don't change the name of the following class attributes,
         # the autograder will check against these attributes. But you will need to change
         # the values in order to initialize them correctly
-        self.W = None
+        self.W = []
+        self.W.append(weight_init_fn(input_size, output_size))  # (784, 10) (input_size, output_size)
         self.dW = None
-        self.b = None
+        self.b = []
+        self.b.append(bias_init_fn(output_size))  # (10, )
         self.db = None
         # HINT: self.foo = [ bar(???) for ?? in ? ]
 
@@ -277,18 +283,36 @@ class MLP(object):
             self.bn_layers = None
 
         # Feel free to add any other attributes useful to your implementation (input, output, ...)
+        self.input = None
+        self.output = None
+        self.batch_size = None
 
     def forward(self, x):
-        raise NotImplemented
+        self.input = x
+        self.batch_size = x.shape[0]
+        # print(x.shape)  # (20, 784) (batch_size, input_size)
+        # (20, 10) (batch_size, output_size) + (20, 10)
+        z = np.matmul(x, self.W[0]) + np.tile(self.b[0].reshape(1, -1), (x.shape[0], 1))
+        self.output = self.activations[0](z)
+        return self.output
 
     def zero_grads(self):
-        raise NotImplemented
+        self.dW = [None]
+        self.db = [None]
 
     def step(self):
-        raise NotImplemented
+        self.W = self.W - self.lr * self.dW[0]
+        self.b = self.b - self.lr * self.db[0]
 
     def backward(self, labels):
-        raise NotImplemented
+        loss = self.criterion(self.output, labels)
+        dErrdZ = 1 / self.batch_size * self.criterion.derivative()
+        dZdW = self.input
+        self.dW = []
+        self.dW.append(np.matmul(dZdW.T, dErrdZ))
+        self.db = []
+        self.db.append(np.sum(dErrdZ, axis=0))
+        return loss
 
     def __call__(self, x):
         return self.forward(x)
