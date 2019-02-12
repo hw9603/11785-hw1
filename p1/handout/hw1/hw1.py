@@ -271,11 +271,24 @@ class MLP(object):
         # the autograder will check against these attributes. But you will need to change
         # the values in order to initialize them correctly
         self.W = []
-        self.W.append(weight_init_fn(input_size, output_size))  # (784, 10) (input_size, output_size)
-        self.dW = None
         self.b = []
-        self.b.append(bias_init_fn(output_size))  # (10, )
+        self.dW = None
         self.db = None
+        if self.nlayers == 1:
+            self.W.append(weight_init_fn(input_size, output_size))  # (784, 10) (input_size, output_size)
+            self.b.append(bias_init_fn(output_size))  # (10, )
+        else:
+            for i in range(self.nlayers):
+                if i == 0:
+                    self.W.append(weight_init_fn(input_size, hiddens[0]))
+                    self.b.append(bias_init_fn(hiddens[0]))
+                elif i == self.nlayers - 1:
+                    self.W.append(weight_init_fn(hiddens[-1], output_size))
+                    self.b.append(bias_init_fn(output_size))
+                else:
+                    self.W.append(weight_init_fn(hiddens[i], hiddens[i + 1]))
+                    self.b.append(bias_init_fn(hiddens[i]))
+
         # HINT: self.foo = [ bar(???) for ?? in ? ]
 
         # if batch norm, add batch norm parameters
@@ -292,9 +305,14 @@ class MLP(object):
         self.batch_size = x.shape[0]
         # print(x.shape)  # (20, 784) (batch_size, input_size)
         # (20, 10) (batch_size, output_size) + (20, 10)
-        z = np.matmul(x, self.W[0]) + np.tile(self.b[0].reshape(1, -1), (x.shape[0], 1))
-        self.output = self.activations[0](z)
-        return self.output
+        neuron_outputs = []
+        neuron_outputs.append(x)
+        for i in range(self.nlayers):
+            input = neuron_outputs[i]
+            z = np.matmul(input, self.W[i]) + np.tile(self.b[i].reshape(1, -1), (input.shape[0], 1))
+            output = self.activations[i](z)
+            neuron_outputs.append(output)
+        return neuron_outputs[-1]
 
     def zero_grads(self):
         self.dW = [None]
