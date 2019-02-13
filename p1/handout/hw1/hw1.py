@@ -274,6 +274,7 @@ class MLP(object):
         self.b = []
         self.dW = None
         self.db = None
+        self.dy = None  # dE/dy, y = Activation(z), z = Wx + b
         if self.nlayers == 1:
             self.W.append(weight_init_fn(input_size, output_size))  # (784, 10) (input_size, output_size)
             self.b.append(bias_init_fn(output_size))  # (10, )
@@ -305,14 +306,14 @@ class MLP(object):
         self.batch_size = x.shape[0]
         # print(x.shape)  # (20, 784) (batch_size, input_size)
         # (20, 10) (batch_size, output_size) + (20, 10)
-        neuron_outputs = []
-        neuron_outputs.append(x)
+        self.neuron_outputs = []
+        self.neuron_outputs.append(x)
         for i in range(self.nlayers):
-            input = neuron_outputs[i]
+            input = self.neuron_outputs[i]
             z = np.matmul(input, self.W[i]) + np.tile(self.b[i].reshape(1, -1), (input.shape[0], 1))
             output = self.activations[i](z)
-            neuron_outputs.append(output)
-        return neuron_outputs[-1]
+            self.neuron_outputs.append(output)
+        return self.neuron_outputs[-1]
 
     def zero_grads(self):
         self.dW = [None]
@@ -323,13 +324,20 @@ class MLP(object):
         self.b = self.b - self.lr * self.db[0]
 
     def backward(self, labels):
-        loss = self.criterion(self.output, labels)
-        dErrdZ = 1 / self.batch_size * self.criterion.derivative()
-        dZdW = self.input
+        loss = self.criterion(self.neuron_outputs[-1], labels)
         self.dW = []
-        self.dW.append(np.matmul(dZdW.T, dErrdZ))
         self.db = []
-        self.db.append(np.sum(dErrdZ, axis=0))
+        self.dy = []
+        self.dy.insert(0, 1)  # insert to the front
+        for i in range(self.nlayers, 0, -1):
+            if i == self.nlayers:
+                dErrdZ = 1 / self.batch_size * self.criterion.derivative() * self.dy[0]
+            else:
+                self.activations[i - 1](self.neuron_outputs[i])
+                dErrdZ = self.activations[i - 1].derivative() * self.dy[0]
+            self.dW.insert(0, np.matmul(self.neuron_outputs[i - 1].T, dErrdZ))
+            self.db.insert(0, np.sum(dErrdZ, axis=0))
+            self.dy.insert(0, np.matmul(dErrdZ, self.W[i - 1].T))
         return loss
 
     def __call__(self, x):
