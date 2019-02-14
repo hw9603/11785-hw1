@@ -274,7 +274,7 @@ class MLP(object):
         self.b = []
         self.dW = None
         self.db = None
-        self.dy = None  # dE/dy, y = Activation(z), z = Wx + b
+        self.dy = None
         if self.nlayers == 1:
             self.W.append(weight_init_fn(input_size, output_size))  # (784, 10) (input_size, output_size)
             self.b.append(bias_init_fn(output_size))  # (10, )
@@ -316,12 +316,14 @@ class MLP(object):
         return self.neuron_outputs[-1]
 
     def zero_grads(self):
-        self.dW = [None]
-        self.db = [None]
+        self.dW = None
+        self.db = None
+        self.dy = None
 
     def step(self):
-        self.W = self.W - self.lr * self.dW[0]
-        self.b = self.b - self.lr * self.db[0]
+        for i in range(self.nlayers):
+            self.W[i] = self.W[i] - self.lr * self.dW[i]
+            self.b[i] = self.b[i] - self.lr * self.db[i]
 
     def backward(self, labels):
         loss = self.criterion(self.neuron_outputs[-1], labels)
@@ -333,7 +335,6 @@ class MLP(object):
             if i == self.nlayers:
                 dErrdZ = 1 / self.batch_size * self.criterion.derivative() * self.dy[0]
             else:
-                self.activations[i - 1](self.neuron_outputs[i])
                 dErrdZ = self.activations[i - 1].derivative() * self.dy[0]
             self.dW.insert(0, np.matmul(self.neuron_outputs[i - 1].T, dErrdZ))
             self.db.insert(0, np.sum(dErrdZ, axis=0))
