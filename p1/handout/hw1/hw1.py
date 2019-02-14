@@ -291,6 +291,8 @@ class MLP(object):
                     self.b.append(bias_init_fn(hiddens[i]))
 
         # HINT: self.foo = [ bar(???) for ?? in ? ]
+        self.deltaW = [w - w for w in self.W]
+        self.deltab = [b - b for b in self.b]
 
         # if batch norm, add batch norm parameters
         if self.bn:
@@ -322,8 +324,10 @@ class MLP(object):
 
     def step(self):
         for i in range(self.nlayers):
-            self.W[i] = self.W[i] - self.lr * self.dW[i]
-            self.b[i] = self.b[i] - self.lr * self.db[i]
+            self.deltaW[i] = self.deltaW[i] * self.momentum - self.lr * self.dW[i]
+            self.deltab[i] = self.deltab[i].flatten() * self.momentum - self.lr * self.db[i]
+            self.W[i] = self.W[i] + self.deltaW[i]
+            self.b[i] = self.b[i] + self.deltab[i]
 
     def backward(self, labels):
         loss = self.criterion(self.neuron_outputs[-1], labels)
