@@ -5,19 +5,19 @@ from torch.utils import data
 from torch.utils.data import Dataset, DataLoader
 from torch.autograd import Variable
 from wsj_loader import WSJ
+import time
 
 
 class WSJDataset(Dataset):
     def __init__(self, dataset, context_size=12):
-        # TODO: remove indexing after compiling successfully
         self.X = dataset[0]
         self.Y = dataset[1]
         self.is_test = False
         if self.Y is None:
             self.is_test = True
         else:
-            self.X = self.X[0:100]
-            self.Y = self.Y[0:100]
+            self.X = self.X
+            self.Y = self.Y
             assert(self.X.shape[0] == self.Y.shape[0])
 
         self.context_size = context_size
@@ -90,6 +90,8 @@ def train(net, optimizer, criterion, train_loader, gpu, epoch):
     net.train()
     device = torch.device("cuda" if gpu else "cpu")
     net.to(device)
+
+    t = time.time()
     for batch_idx, (inputs, labels) in enumerate(train_loader):
         # cuda
         inputs = Variable(inputs.to(device), volatile=True)
@@ -100,8 +102,9 @@ def train(net, optimizer, criterion, train_loader, gpu, epoch):
         loss = criterion(outputs, labels)
         loss.backward()
         optimizer.step()
-        if batch_idx % 100 == 0:
-            print("[Train Epoch %d] batch_idx=%d, loss=%.4f" % (epoch, batch_idx, loss.item()))
+        if batch_idx % 10000 == 0:
+            print("[Train Epoch %d] batch_idx=%d [%.2f%%, time: %.2f min], loss=%.4f" %
+                  (epoch, batch_idx, 100. * batch_idx / len(train_loader), (time.time() - t) / 60, loss.item()))
 
 
 """ function for validation """
@@ -130,7 +133,7 @@ def validate(net, criterion, dev_loader, gpu, epoch):
 
     running_loss /= len(dev_loader.dataset)
     acc = (correct_predictions / total_predictions) * 100.0
-    print("[Val Epoch %d] loss=%.4f, acc=%.4f" % (epoch, running_loss, acc))
+    print("[Val Epoch %d] loss=%.4f, acc=%.4f%%" % (epoch, running_loss, acc))
 
 
 """ function for testing """
@@ -172,11 +175,11 @@ def main():
         print("Using GPU for training!")
     else:
         print("Not using GPU for training!")
-    epochs = 2
+    epochs = 8
     lr = 1e-3
-    batch_size = 10
+    batch_size = 64
     context_size = 12
-    params = {"batch_size": batch_size, "shuffle": True, "num_workers": 2, "pin_memory": gpu}
+    params = {"batch_size": batch_size, "shuffle": True, "num_workers": 8, "pin_memory": gpu}
 
     input_size = (2 * context_size + 1) * 40
     output_size = 138
@@ -200,8 +203,11 @@ def main():
     for epoch in range(epochs):
         print("===========Training==========")
         train(net, optimizer, criterion, train_loader, gpu, epoch)
-        print("==========Validation=========")
-        validate(net, criterion, dev_loader, gpu, epoch)
+        if epoch % 2 == 0 or epoch == epochs - 1:
+            path = "model_epoch" + str(epoch)
+            torch.save(net.state_dict(), path)
+            print("==========Validation=========")
+            validate(net, criterion, dev_loader, gpu, epoch)
 
     print("Congratulations! Training completed successfully!")
     print("Now predict on the test set...")
