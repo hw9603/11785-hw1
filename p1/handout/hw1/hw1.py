@@ -213,28 +213,32 @@ class BatchNorm(object):
         return self.forward(x, eval)
 
     def forward(self, x, eval=False):
-
-        # if eval:
-        #    # ???
-
         self.x = x
+        if eval:
+            self.norm = (self.x - self.running_mean) / np.sqrt(self.running_var + self.eps)
+        else:
+            self.mean = np.mean(self.x, axis=0)
+            self.var = np.var(self.x, axis=0)
+            self.norm = (self.x - self.mean) / np.sqrt(self.var + self.eps)
+            # update running batch statistics
+            self.running_mean = self.alpha * self.running_mean + (1 - self.alpha) * self.mean
+            self.running_var = self.alpha * self.running_var + (1 - self.alpha) * self.var
 
-        # self.mean = # ???
-        # self.var = # ???
-        # self.norm = # ???
-        # self.out = # ???
-
-        # update running batch statistics
-        # self.running_mean = # ???
-        # self.running_var = # ???
-
-        # ...
-
-        raise NotImplemented
+        self.out = self.gamma * self.norm + self.beta
+        return self.out
 
     def backward(self, delta):
+        dLdnorm = delta * self.gamma
+        self.dbeta = np.sum(delta, axis=0)
+        self.dgamma = np.sum(delta * self.norm, axis=0)
 
-        raise NotImplemented
+        dnormdvar = -0.5 * (self.x - self.mean) * np.power(self.var + self.eps, -1.5)
+        dLdvar = np.sum(dLdnorm * dnormdvar, axis=0)
+        m = len(self.x)
+        dLdmean = -np.sum(dLdnorm * np.power(self.var + self.eps, -0.5), axis=0) \
+                  - 2 / m * dLdvar * np.sum(self.x - self.mean, axis=0)
+        dLdx = dLdnorm * np.power(self.var + self.eps, -0.5) + dLdvar * 2 / m * (self.x - self.mean) + dLdmean / m
+        return dLdx
 
 
 # These are both easy one-liners, don't over-think them
@@ -296,7 +300,9 @@ class MLP(object):
 
         # if batch norm, add batch norm parameters
         if self.bn:
-            self.bn_layers = None
+            self.bn_layers = []
+            for i in range(self.num_bn_layers):
+                self.bn_layers.append(BatchNorm(hiddens[i]))
 
         # Feel free to add any other attributes useful to your implementation (input, output, ...)
         self.input = None
@@ -313,6 +319,9 @@ class MLP(object):
         for i in range(self.nlayers):
             input = self.neuron_outputs[i]
             z = np.matmul(input, self.W[i]) + np.tile(self.b[i].reshape(1, -1), (input.shape[0], 1))
+            # add batch norm
+            if i < self.num_bn_layers:
+                z = self.bn_layers[i].forward(z, not self.train_mode)
             output = self.activations[i](z)
             self.neuron_outputs.append(output)
         return self.neuron_outputs[-1]
@@ -328,6 +337,10 @@ class MLP(object):
             self.deltab[i] = self.deltab[i].flatten() * self.momentum - self.lr * self.db[i]
             self.W[i] = self.W[i] + self.deltaW[i]
             self.b[i] = self.b[i] + self.deltab[i]
+        if self.bn:
+            for i in range(self.num_bn_layers):
+                self.bn_layers[i].gamma = self.bn_layers[i].gamma - self.lr * self.bn_layers[i].dgamma
+                self.bn_layers[i].beta = self.bn_layers[i].beta - self.lr * self.bn_layers[i].dbeta
 
     def backward(self, labels):
         loss = self.criterion(self.neuron_outputs[-1], labels)
@@ -337,11 +350,14 @@ class MLP(object):
         self.dy.insert(0, 1)  # insert to the front
         for i in range(self.nlayers, 0, -1):
             if i == self.nlayers:
-                dErrdZ = 1 / self.batch_size * self.criterion.derivative() * self.dy[0]
+                dErrdZ = self.criterion.derivative() * self.dy[0]
             else:
-                dErrdZ = self.activations[i - 1].derivative() * self.dy[0]
-            self.dW.insert(0, np.matmul(self.neuron_outputs[i - 1].T, dErrdZ))
-            self.db.insert(0, np.sum(dErrdZ, axis=0))
+                if i - 1 < self.num_bn_layers:
+                    dErrdZ = self.bn_layers[i - 1].backward(self.activations[i - 1].derivative() * self.dy[0])
+                else:
+                    dErrdZ = self.activations[i - 1].derivative() * self.dy[0]
+            self.dW.insert(0, np.matmul(self.neuron_outputs[i - 1].T, dErrdZ) / self.batch_size)
+            self.db.insert(0, np.sum(dErrdZ, axis=0) / self.batch_size)
             self.dy.insert(0, np.matmul(dErrdZ, self.W[i - 1].T))
         return loss
 
