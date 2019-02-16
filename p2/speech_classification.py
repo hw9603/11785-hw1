@@ -62,6 +62,8 @@ class MLPNetwork(nn.Module):
     def __init__(self, input_size, hidden_size, output_size):
         super().__init__()
         # Baseline layer structure:  [input_size, 1024, 1024, 512, 512, output_size]
+        self.input_size = input_size
+        self.output_size = output_size
         layer_size = [input_size] + hidden_size + [output_size]
         self.layers = []
         for i in range(len(layer_size) - 1):
@@ -72,7 +74,7 @@ class MLPNetwork(nn.Module):
         self.model = nn.Sequential(*self.layers)
 
     def forward(self, input):
-        self.input = input
+        self.input = input.view(-1, self.input_size)
         self.output = self.model(self.input)
         return self.output
 
@@ -84,18 +86,18 @@ def train(net, optimizer, criterion, train_loader, gpu, epoch):
     net.train()
     device = torch.device("cuda" if gpu else "cpu")
     net.to(device)
-    for batch_idx, (inputs, labels) in train_loader:
+    for batch_idx, (inputs, labels) in enumerate(train_loader):
         # cuda
-        inputs = torch.tensor(inputs.to(device), requires_grad=True)
-        labels = torch.tensor(labels.to(device), requires_grad=True)
+        inputs = Variable(inputs.to(device), volatile=True)
+        labels = Variable(labels.to(device))
         # mini-batch GD
         optimizer.zero_grad()
         outputs = net.forward(inputs)
         loss = criterion(outputs, labels)
         loss.backward()
         optimizer.step()
-        if batch_idx % 1 == 0:
-            print("[Train Epoch %d] batch_idx=%d, loss=%.4f", epoch, batch_idx, loss.item())
+        if batch_idx % 100 == 0:
+            print("[Train Epoch %d] batch_idx=%d, loss=%.4f" % (epoch, batch_idx, loss.item()))
 
 
 """ function for validation """
@@ -111,8 +113,8 @@ def validate(net, criterion, dev_loader, gpu, epoch):
     correct_predictions = 0.0
     for inputs, labels in dev_loader:
         # cuda
-        inputs = torch.tensor(inputs.to(device), requires_grad=True)
-        labels = torch.tensor(labels.to(device), requires_grad=True)
+        inputs = Variable(inputs.to(device), volatile=True)
+        labels = Variable(labels.to(device))
         # compute result and evaluate loss
         outputs = net.forward(inputs)
         loss = criterion(outputs, labels)
@@ -120,11 +122,11 @@ def validate(net, criterion, dev_loader, gpu, epoch):
         # predict labels
         _, predicted = torch.max(outputs.data, 1)
         total_predictions += labels.size(0)
-        correct_predictions += (predicted == outputs).sum().item()
+        correct_predictions += (predicted == labels).sum().item()
 
     running_loss /= len(dev_loader.dataset)
     acc = (correct_predictions / total_predictions) * 100.0
-    print("[Val Epoch %d] loss=%.4f, acc=%.4f", epoch, running_loss, acc)
+    print("[Val Epoch %d] loss=%.4f, acc=%.4f" % (epoch, running_loss, acc))
 
 
 """ function for testing """
@@ -141,13 +143,17 @@ def test(net, test_loader):
 
 def main():
     # parameters
-    gpu = False
+    gpu = True
     gpu = gpu and torch.cuda.is_available()
+    if gpu:
+        print("Using GPU for training!")
+    else:
+        print("Not using GPU for training!")
     epochs = 6
     lr = 1e-3
     batch_size = 10
     context_size = 12
-    params = {"batch_size": batch_size, "shuffle": True, "num_workers": 1, "pin_memory": gpu}
+    params = {"batch_size": batch_size, "shuffle": True, "num_workers": 2, "pin_memory": gpu}
 
     input_size = (2 * context_size + 1) * 40
     output_size = 138
