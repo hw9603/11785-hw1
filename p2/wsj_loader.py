@@ -3,6 +3,7 @@ import os
 
 WSJ_PATH = "/home/ubuntu/11785-hw1/p2/data"
 
+
 class WSJ():
     """ Load the WSJ speech dataset
 
