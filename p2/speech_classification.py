@@ -10,12 +10,13 @@ from wsj_loader import WSJ
 class WSJDataset(Dataset):
     def __init__(self, dataset, context_size=12):
         # TODO: remove indexing after compiling successfully
-        self.X = dataset[0][0:100]
+        self.X = dataset[0]
         self.Y = dataset[1]
         self.is_test = False
         if self.Y is None:
             self.is_test = True
         else:
+            self.X = self.X[0:100]
             self.Y = self.Y[0:100]
             assert(self.X.shape[0] == self.Y.shape[0])
 
@@ -45,8 +46,11 @@ class WSJDataset(Dataset):
 
     def __getitem__(self, item):
         x = self.concat_X[item]
-        label = self.concat_Y[item]
-        return x, label
+        if not self.is_test:
+            label = self.concat_Y[item]
+            return x, label
+        else:
+            return x
 
     # def frames_concatenation(self, frames, frame_id):
     #     # zero padding to shape of [(2k+len(frames)) * 40]
@@ -132,10 +136,29 @@ def validate(net, criterion, dev_loader, gpu, epoch):
 """ function for testing """
 
 
-def test(net, test_loader):
+def test(net, test_loader, output_file, gpu):
     net.eval()
-    output = net.forward()
+    device = torch.device("cuda" if gpu else "cpu")
+    net.to(device)
 
+    # open output file
+    fwrite = open(output_file, "w")
+    fwrite.write("id,label\n")
+
+    id = 0
+
+    # predict in batch
+    for inputs in test_loader:
+        inputs = Variable(inputs.to(device), volatile=True)
+        outputs = net.forward(inputs)
+        # predict labels
+        _, predicted = torch.max(outputs.data, 1)
+        for label in predicted.cpu().numpy():
+            wstring = str(id) + "," + str(label) + "\n"
+            id += 1
+            fwrite.write(wstring)
+    fwrite.close()
+    print("Prediction file generated!")
 
 
 """ main routine """
@@ -149,7 +172,7 @@ def main():
         print("Using GPU for training!")
     else:
         print("Not using GPU for training!")
-    epochs = 6
+    epochs = 2
     lr = 1e-3
     batch_size = 10
     context_size = 12
@@ -162,11 +185,11 @@ def main():
     print("loading WSJ...")
     loader = WSJ()
     print("loading training data...")
-    train_loader = DataLoader(WSJDataset(loader.train, context_size=context_size), **params)
+    train_loader = DataLoader(WSJDataset(loader.train, context_size), **params)
     print("loading dev data...")
-    dev_loader = DataLoader(WSJDataset(loader.dev, context_size=context_size), **params)
+    dev_loader = DataLoader(WSJDataset(loader.dev, context_size), **params)
     print("loading test data...")
-    test_loader = DataLoader(WSJDataset(loader.test, context_size=context_size), **params)
+    test_loader = DataLoader(WSJDataset(loader.test, context_size))
 
     # model definition
     net = MLPNetwork(input_size, [1024, 1024, 512, 512], output_size)
@@ -181,6 +204,8 @@ def main():
         validate(net, criterion, dev_loader, gpu, epoch)
 
     print("Congratulations! Training completed successfully!")
+    print("Now predict on the test set...")
+    test(net, test_loader, "submission.csv", gpu)
 
 
 if __name__ == "__main__":
