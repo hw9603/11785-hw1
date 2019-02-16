@@ -1,6 +1,7 @@
 import numpy as np
 import os
 
+WSJ_PATH = "/home/ubuntu/11785-hw1/p2/data"
 
 class WSJ():
     """ Load the WSJ speech dataset
@@ -23,19 +24,19 @@ class WSJ():
     @property
     def dev(self):
         if self.dev_set is None:
-            self.dev_set = load_raw(os.environ['WSJ_PATH'], 'dev')
+            self.dev_set = load_raw(WSJ_PATH, 'dev')
         return self.dev_set
 
     @property
     def train(self):
         if self.train_set is None:
-            self.train_set = load_raw(os.environ['WSJ_PATH'], 'train')
+            self.train_set = load_raw(WSJ_PATH, 'train')
         return self.train_set
 
     @property
     def test(self):
         if self.test_set is None:
-            self.test_set = (np.load(os.path.join(os.environ['WSJ_PATH'], 'test.npy'), encoding='bytes'), None)
+            self.test_set = (np.load(os.path.join(WSJ_PATH, 'test.npy'), encoding='bytes'), None)
         return self.test_set
 
 
