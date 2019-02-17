@@ -343,7 +343,8 @@ class MLP(object):
                 self.bn_layers[i].beta = self.bn_layers[i].beta - self.lr * self.bn_layers[i].dbeta
 
     def backward(self, labels):
-        loss = self.criterion(self.neuron_outputs[-1], labels)
+        loss = self.criterion(self.neuron_outputs[-1], labels).mean()
+        error = np.sum(self.neuron_outputs[-1].argmax(axis=1) != labels.argmax(axis=1)) / len(self.input)
         self.dW = []
         self.db = []
         self.dy = []
@@ -359,7 +360,7 @@ class MLP(object):
             self.dW.insert(0, np.matmul(self.neuron_outputs[i - 1].T, dErrdZ) / self.batch_size)
             self.db.insert(0, np.sum(dErrdZ, axis=0) / self.batch_size)
             self.dy.insert(0, np.matmul(dErrdZ, self.W[i - 1].T))
-        return loss
+        return loss, error
 
     def __call__(self, x):
         return self.forward(x)
@@ -372,7 +373,6 @@ class MLP(object):
 
 
 def get_training_stats(mlp, dset, nepochs, batch_size):
-
     train, val, test = dset
     trainx, trainy = train
     valx, valy = val
@@ -388,30 +388,52 @@ def get_training_stats(mlp, dset, nepochs, batch_size):
     # Setup ...
 
     for e in range(nepochs):
+        print("Epoch %d" % e)
+        # shuffle the data
+        train_indices = np.arange(trainx.shape[0])
+        val_indices = np.arange(valx.shape[0])
+        np.random.shuffle(train_indices)
+        np.random.shuffle(val_indices)
+        trainx = trainx[train_indices]
+        trainy = trainy[train_indices]
+        valx = valx[val_indices]
+        valy = valy[val_indices]
 
-        # Per epoch setup ...
-
+        train_loss = 0
+        train_error = 0
+        mlp.train()
         for b in range(0, len(trainx), batch_size):
-
-            pass  # Remove this line when you start implementing this
             # Train ...
+            inputs = trainx[b:batch_size + b]
+            labels = trainy[b:batch_size + b]
+            mlp.zero_grads()
+            mlp.forward(inputs)
+            loss, error = mlp.backward(labels)
+            train_loss += loss
+            train_error += error
+            mlp.step()
+        train_loss /= (len(trainx) / batch_size)
+        train_error /= (len(trainx) / batch_size)
 
+        mlp.eval()
+        val_loss = 0
+        val_error = 0
         for b in range(0, len(valx), batch_size):
-
-            pass  # Remove this line when you start implementing this
             # Val ...
+            inputs = valx[b:batch_size + b]
+            labels = valy[b:batch_size + b]
+            mlp.zero_grads()
+            mlp.forward(inputs)
+            loss, error = mlp.backward(labels)
+            val_loss += loss
+            val_error += error
+            mlp.step()
+        val_loss /= (len(valx) / batch_size)
+        val_error /= (len(valx) / batch_size)
 
-        # Accumulate data...
+        training_losses.append(train_loss)
+        training_errors.append(train_error)
+        validation_losses.append(val_loss)
+        validation_errors.append(val_error)
 
-    # Cleanup ...
-
-    for b in range(0, len(testx), batch_size):
-
-        pass  # Remove this line when you start implementing this
-        # Test ...
-
-    # Return results ...
-
-    # return (training_losses, training_errors, validation_losses, validation_errors)
-
-    raise NotImplemented
+    return training_losses, training_errors, validation_losses, validation_errors
